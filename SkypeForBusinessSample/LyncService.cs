@@ -1,5 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 using Microsoft.Lync.Model;
@@ -12,6 +15,7 @@ namespace SkypeForBusinessSample {
         private static readonly Logger _logger = LogManager.GetCurrentClassLogger();
         private LyncClient _client;
         private bool _initializedBySample;
+        private readonly Dictionary<string, Session> _activeSessions = new Dictionary<string, Session>();
 
         public void Start() {
             StartAsync().Wait();
@@ -68,17 +72,30 @@ namespace SkypeForBusinessSample {
         private async Task StopAsync() {
             // Turn off event registration for state change
             UnregisterEvents();
+
+            foreach (var session in _activeSessions.Values) {
+                session.Close();
+            }
+
             LyncHelper.SetUISuppressionMode(false);
 
             if (_client.State == ClientState.SignedIn) {
-                await _client.SignOutAsync();
+                _logger.Debug("Signing out");
+                //await _client.SignOutAsync();
+
+                ManualResetEventSlim s = new ManualResetEventSlim(false);
+                _client.BeginSignOut(ar => { _client.EndSignOut(ar); s.Set();}, null);
+                s.Wait();
             }
 
             if (_client.State == ClientState.SignedOut) {
                 if (_client.InSuppressedMode && _initializedBySample) {
+                    _logger.Debug("shutting down");
                     await _client.ShutdownAsync();
                 }
             }
+
+            _logger.Debug("Stopped");
         }
 
         private void RegisterEvents() {
@@ -105,10 +122,33 @@ namespace SkypeForBusinessSample {
 
         private void OnConversationAdded(object sender, ConversationManagerEventArgs args) {
             _logger.Debug("New conversation...");
+
+            if (!args.Conversation.Modalities.ContainsKey(ModalityTypes.InstantMessage)) {
+                _logger.Info("Conversation does not contains a InstantMessage modality");
+                args.Conversation.End();
+                return;
+            }
+
+            string chatId = args.Conversation.Participants[1].Contact.Uri.Replace("sip:", "");
+            Session session;
+            if (!_activeSessions.TryGetValue(chatId, out session)) {
+                session = new Session(chatId, args.Conversation);
+                _activeSessions.Add(chatId, session);
+            } else {
+                _logger.Debug("There's already a session for this new conversation???");
+            }
         }
 
         private void OnConversationRemoved(object sender, ConversationManagerEventArgs args) {
             _logger.Debug("On conversation removed");
+
+            var chatId = args.Conversation.Participants[1].Contact.Uri.Replace("sip:", "");
+            Session session;
+            if (!_activeSessions.TryGetValue(chatId, out session)) {
+                _logger.Debug("Conversation ended which we didn't know about");
+            } else {
+                _activeSessions.Remove(chatId);
+            }
         }
     }
 }

@@ -64,11 +64,13 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="InstantMessageModalityExtensions.cs" />
     <Compile Include="LyncClientExtensions.cs" />
     <Compile Include="LyncHelper.cs" />
     <Compile Include="LyncService.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Session.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
