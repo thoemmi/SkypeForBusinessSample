@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
-using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 
 using Microsoft.Lync.Model;
@@ -22,7 +21,10 @@ namespace SkypeForBusinessSample {
         }
 
         private async Task StartAsync() {
+            // enable UI suppression mode
             LyncHelper.SetUISuppressionMode(true);
+
+            // kill all running Lync and S4B processes
             LyncHelper.KillAllInstances();
 
             try {
@@ -38,6 +40,7 @@ namespace SkypeForBusinessSample {
             _client = LyncClient.GetClient();
             _client.CredentialRequested += ClientOnCredentialRequested;
 
+            // initialize the Lync client
             if (_client.State == ClientState.Uninitialized) {
                 await _client.InitializeAsync();
                 _initializedBySample = true;
@@ -48,6 +51,8 @@ namespace SkypeForBusinessSample {
             await _client.SignInAsync();
 
             _logger.Debug($"Started, state is {_client.State}");
+
+            _logger.Info($"Listening as {_client.Self.Contact.Uri.Replace("sip:", string.Empty)}");
         }
 
         private void ClientOnCredentialRequested(object sender, CredentialRequestedEventArgs args) {
@@ -77,17 +82,16 @@ namespace SkypeForBusinessSample {
                 session.Close();
             }
 
+            // disable UI suppression mode
             LyncHelper.SetUISuppressionMode(false);
 
+            // sign out
             if (_client.State == ClientState.SignedIn) {
                 _logger.Debug("Signing out");
-                //await _client.SignOutAsync();
-
-                ManualResetEventSlim s = new ManualResetEventSlim(false);
-                _client.BeginSignOut(ar => { _client.EndSignOut(ar); s.Set();}, null);
-                s.Wait();
+                await _client.SignOutAsync();
             }
 
+            // if this application initialized Lync, shut it down
             if (_client.State == ClientState.SignedOut) {
                 if (_client.InSuppressedMode && _initializedBySample) {
                     _logger.Debug("shutting down");
@@ -116,38 +120,42 @@ namespace SkypeForBusinessSample {
 
 
         private static void ClientOnStateChanged(object sender, ClientStateChangedEventArgs args) {
-            _logger.Debug(
-                $"State of Lync changed from {args.OldState} to {args.NewState}, status code {args.StatusCode}");
+            var status = args.StatusCode < 0 ? new Win32Exception(args.StatusCode).Message : args.StatusCode.ToString();
+            _logger.Debug($"State of Lync changed from {args.OldState} to {args.NewState}, status code {status}");
         }
 
         private void OnConversationAdded(object sender, ConversationManagerEventArgs args) {
             _logger.Debug("New conversation...");
 
+            // only chat sessions are allowed
             if (!args.Conversation.Modalities.ContainsKey(ModalityTypes.InstantMessage)) {
                 _logger.Info("Conversation does not contains a InstantMessage modality");
                 args.Conversation.End();
                 return;
             }
 
-            string chatId = args.Conversation.Participants[1].Contact.Uri.Replace("sip:", "");
+            // Create a Session instance for the new conversation
+            var chatId = args.Conversation.Participants[1].Contact.Uri.Replace("sip:", "");
             Session session;
             if (!_activeSessions.TryGetValue(chatId, out session)) {
                 session = new Session(chatId, args.Conversation);
                 _activeSessions.Add(chatId, session);
             } else {
-                _logger.Debug("There's already a session for this new conversation???");
+                _logger.Warn("There's already a session for this new conversation???");
             }
         }
 
         private void OnConversationRemoved(object sender, ConversationManagerEventArgs args) {
             _logger.Debug("On conversation removed");
 
+            // try to remove the Session associated with the removed conversation
             var chatId = args.Conversation.Participants[1].Contact.Uri.Replace("sip:", "");
             Session session;
-            if (!_activeSessions.TryGetValue(chatId, out session)) {
-                _logger.Debug("Conversation ended which we didn't know about");
-            } else {
+            if (_activeSessions.TryGetValue(chatId, out session)) {
+                session.Dispose();
                 _activeSessions.Remove(chatId);
+            } else {
+                _logger.Debug("Conversation ended which we didn't know about");
             }
         }
     }
