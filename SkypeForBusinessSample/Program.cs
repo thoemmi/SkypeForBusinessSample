@@ -36,7 +36,6 @@ namespace SkypeForBusinessSample {
             // log to file
             var fileTarget = new FileTarget {
                 FileName = Path.Combine(Path.GetTempPath(), "SkypeForBusinessSample.txt"),
-                Layout = "${message}"
             };
             config.AddTarget("file", fileTarget);
             config.LoggingRules.Add(new LoggingRule("*", LogLevel.Trace, fileTarget));
