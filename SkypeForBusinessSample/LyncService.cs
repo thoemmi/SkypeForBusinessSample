@@ -28,13 +28,15 @@ namespace SkypeForBusinessSample {
             LyncHelper.KillAllInstances();
 
             try {
-                if (LyncClient.GetClient().InSuppressedMode) {
-                    Process.Start("lync.exe");
+                //var lyncProcess = Process.Start("lync.exe");
+                var lyncProcess = Process.Start("C:\\Program Files (x86)\\Microsoft Office\\Office15\\lync.exe");
+                if (!LyncClient.GetClient().InSuppressedMode) {
+                    lyncProcess.WaitForInputIdle(5000/*msec*/);
                 }
                 _logger.Debug("Lync.exe is running with UI suppression mode");
             }
             catch (Exception ex) {
-                _logger.Debug(ex, @"lync.exe is not found.");
+                _logger.Debug(ex, @"lync.exe is not found: " + ex.Message);
             }
 
             _client = LyncClient.GetClient();
