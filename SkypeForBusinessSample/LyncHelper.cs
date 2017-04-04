@@ -19,7 +19,8 @@ namespace SkypeForBusinessSample {
 
         public static void SetUISuppressionMode(bool enabled) {
             // Lync 2013 Client
-            var lyncClient = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Office\15.0\Lync", true);
+            var baseKey = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry32);
+            var lyncClient = baseKey.OpenSubKey(@"Software\Microsoft\Office\15.0\Lync", true);
             if (lyncClient != null) {
                 lyncClient.SetValue("UISuppressionMode", enabled ? 1 : 0, RegistryValueKind.DWord);
                 _logger.Debug($"UISuppressionMode {(enabled ? "enabled" : "disabled")} for Lync 2013 client");
@@ -28,7 +29,7 @@ namespace SkypeForBusinessSample {
             }
 
             // Skype For Business
-            var skypeforBusiness = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Office\16.0\Lync", true);
+            var skypeforBusiness = baseKey.OpenSubKey(@"Software\Microsoft\Office\16.0\Lync", true);
             if (skypeforBusiness != null) {
                 skypeforBusiness.SetValue("UISuppressionMode", enabled ? 1 : 0, RegistryValueKind.DWord);
                 _logger.Debug($"UISuppressionMode {(enabled ? "enabled" : "disabled")} for Skype for business");
